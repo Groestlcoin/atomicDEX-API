@@ -22,7 +22,7 @@ use crate::config::GossipsubConfig;
 use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
 use crate::protocol::{GossipsubControlAction, GossipsubMessage, GossipsubSubscription, GossipsubSubscriptionAction,
-                      MessageId};
+                      MessageId, SubscriptionParam};
 use crate::topic::{Topic, TopicHash};
 use futures::prelude::*;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
@@ -90,6 +90,9 @@ pub struct Gossipsub {
     keep_connection_to: Vec<Multiaddr>,
 
     dial_attempts: HashMap<Multiaddr, Instant>,
+
+    /// The subscription parameters for topics we subscribed to.
+    topic_params: HashMap<TopicHash, Vec<SubscriptionParam>>,
 }
 
 impl Gossipsub {
@@ -126,13 +129,14 @@ impl Gossipsub {
             dial_attempts: HashMap::new(),
             connected_relayers: HashSet::new(),
             relayers_mesh: HashSet::new(),
+            topic_params: HashMap::new(),
         }
     }
 
     /// Subscribe to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
-    pub fn subscribe(&mut self, topic: Topic) -> bool {
+    pub fn subscribe(&mut self, topic: Topic, params: Vec<SubscriptionParam>) -> bool {
         debug!("Subscribing to topic: {}", topic);
         if self.config.i_am_relay {
             debug!("Relay is subscribed to all topics by default. Subscribe has no effect.");
@@ -144,6 +148,10 @@ impl Gossipsub {
             return false;
         }
 
+        if self.topic_params.insert(topic_hash.clone(), params.clone()).is_some() {
+            error!("Topic: {} is already in the topic_params", topic);
+        };
+
         for (peer_id, _) in self.peer_topics.iter() {
             let mut fixed_event = None; // initialise the event once if needed
             if fixed_event.is_none() {
@@ -152,6 +160,7 @@ impl Gossipsub {
                     subscriptions: vec![GossipsubSubscription {
                         topic_hash: topic_hash.clone(),
                         action: GossipsubSubscriptionAction::Subscribe,
+                        params: params.clone(),
                     }],
                     control_msgs: Vec::new(),
                 }));
@@ -193,6 +202,10 @@ impl Gossipsub {
             return false;
         }
 
+        if self.topic_params.remove(&topic_hash).is_none() {
+            error!("Topic: {} not found in topic_params", topic);
+        }
+
         // announce to all peers in the topic
         let mut fixed_event = None; // initialise the event once if needed
         if let Some(peer_list) = self.topic_peers.get(topic_hash) {
@@ -202,6 +215,8 @@ impl Gossipsub {
                     subscriptions: vec![GossipsubSubscription {
                         topic_hash: topic_hash.clone(),
                         action: GossipsubSubscriptionAction::Unsubscribe,
+                        // set an empty params
+                        params: Vec::new(),
                     }],
                     control_msgs: Vec::new(),
                 }));
@@ -619,6 +634,7 @@ impl Gossipsub {
                         .push_back(NetworkBehaviourAction::GenerateEvent(GossipsubEvent::Subscribed {
                             peer_id: propagation_source.clone(),
                             topic: subscription.topic_hash.clone(),
+                            params: subscription.params.clone(),
                         }));
                 },
                 GossipsubSubscriptionAction::Unsubscribe => {
@@ -637,12 +653,16 @@ impl Gossipsub {
                     if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
                         peers.retain(|peer| peer != propagation_source);
                     }
+                    if !subscription.params.is_empty() {
+                        error!("Subscription parameters should be an empty for Ubsubscribe action, received {:?}", subscription.params);
+                    }
 
                     // generate an unsubscribe event to be polled
                     self.events
                         .push_back(NetworkBehaviourAction::GenerateEvent(GossipsubEvent::Unsubscribed {
                             peer_id: propagation_source.clone(),
                             topic: subscription.topic_hash.clone(),
+                            params: subscription.params.clone(),
                         }));
                 },
             }
@@ -1367,6 +1387,8 @@ pub enum GossipsubEvent {
         peer_id: PeerId,
         /// The topic it has subscribed to.
         topic: TopicHash,
+        /// The subscription parameters.
+        params: Vec<SubscriptionParam>,
     },
 
     /// A remote unsubscribed from a topic.
@@ -1375,5 +1397,7 @@ pub enum GossipsubEvent {
         peer_id: PeerId,
         /// The topic it has subscribed from.
         topic: TopicHash,
+        /// The subscription parameters.
+        params: Vec<SubscriptionParam>,
     },
 }

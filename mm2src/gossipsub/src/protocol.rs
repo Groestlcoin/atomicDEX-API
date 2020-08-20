@@ -129,6 +129,10 @@ impl Encoder for GossipsubCodec {
             .map(|sub| rpc_proto::rpc::SubOpts {
                 subscribe: Some(sub.action == GossipsubSubscriptionAction::Subscribe),
                 topic_id: Some(sub.topic_hash.into_string()),
+                params: sub
+                    .params
+                    .into_iter()
+                    .map(|p| rpc_proto::rpc::SubParam { param: p.into() }),
             })
             .collect::<Vec<_>>();
 
@@ -331,6 +335,8 @@ pub struct GossipsubSubscription {
     pub action: GossipsubSubscriptionAction,
     /// The topic from which to subscribe or unsubscribe.
     pub topic_hash: TopicHash,
+    /// The subscription parameters.
+    pub params: Vec<SubscriptionParam>,
 }
 
 /// Action that a subscription wants to perform.
@@ -340,6 +346,18 @@ pub enum GossipsubSubscriptionAction {
     Subscribe,
     /// The remote wants to unsubscribe from the given topic.
     Unsubscribe,
+}
+
+/// A subscription parameter defined in user space.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SubscriptionParam(Vec<u8>);
+
+impl From<Vec<u8>> for SubscriptionParam {
+    fn from(p: Vec<u8>) -> Self { SubscriptionParam(p) }
+}
+
+impl From<SubscriptionParam> for Vec<u8> {
+    fn from(p: SubscriptionParam) -> Self { p.0 }
 }
 
 /// A Control message received by the gossipsub system.

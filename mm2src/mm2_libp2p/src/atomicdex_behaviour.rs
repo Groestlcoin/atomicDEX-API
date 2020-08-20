@@ -84,6 +84,8 @@ pub enum AdexBehaviorCmd {
     Subscribe {
         /// Subscribe to this topic
         topic: String,
+        ///
+        params: ,
     },
     PublishMsg {
         topic: String,

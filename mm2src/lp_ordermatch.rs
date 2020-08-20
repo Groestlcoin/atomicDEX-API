@@ -457,6 +457,10 @@ async fn maker_order_cancelled_p2p_notify(ctx: MmArc, order: &MakerOrder) {
     broadcast_ordermatch_message(&ctx, orderbook_topic(&order.base, &order.rel), message);
 }
 
+pub enum SubscribeParam {
+    OrderbookBaseMaxValue(Option<BigDecimal>)
+}
+
 pub async fn handle_peer_subscribed(ctx: MmArc, peer: &str, topic: &str) {
     let pair = match parse_orderbook_pair_from_topic(topic) {
         Some(p) => p,

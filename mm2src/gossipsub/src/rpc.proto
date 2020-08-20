@@ -9,6 +9,11 @@ message RPC {
 	message SubOpts {
 		optional bool subscribe = 1; // subscribe or unsubscribe
 		optional string topic_id = 2;
+		repeated SubParam params = 3;
+	}
+
+	message SubParam {
+		optional bytes param = 1; // defined in user space parameter
 	}
 
 	optional ControlMessage control = 3;
