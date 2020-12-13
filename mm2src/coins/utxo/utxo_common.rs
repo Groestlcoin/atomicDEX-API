@@ -1734,7 +1734,8 @@ where
         {
             Ok(x) => x,
             Err(err) => {
-                log!("Error " [err] " getting the transaction " [tx_hash] ", skip the unspent output");
+                log!("Error " [err] " getting the transaction " [tx_hash] ", adding unspent output without maturity check");
+                result.push(unspent);
                 continue;
             },
         };
